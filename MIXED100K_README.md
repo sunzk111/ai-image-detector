@@ -1,45 +1,60 @@
-# Mixed100K 数据准备
+# Mixed100K Dataset Preparation
 
-正式入口与结果说明见 [README.md](README.md)。训练集 100,000 张，内部验证额外 4,000 张；二者均 Real/AI 各半。
+See [README.md](README.md) for installation, release-weight downloads, training, evaluation, and results. **Skip training-data preparation when evaluating the released model.**
 
-| 训练来源 | Real | AI |
-| --- | ---: | ---: |
-| CIFAKE | 5,000 | 5,000 |
-| SID_Set | 5,000 | 5,000 |
-| WildFake ImageNet | 20,000 | — |
-| WildFake Church / AFHQ | 各 6,000 | — |
-| WildFake FFHQ / CelebA-HQ | 各 4,000 | — |
-| WildFake DDIM / DDPM / ADM / Imagen / VQDM | — | 各 8,000 |
+The training set contains 100,000 images, balanced between real and AI. A separate, balanced internal-validation set contains 4,000 images.
 
-内部验证为 CIFAKE 500 + SID_Set 500 + WildFake 3,000 张。训练程序再固定划分 1,000 张校准、3,000 张评估；演示集 COCO/DALL·E 不属于此内部划分。
+## Source quotas
 
-## 运行与恢复
+| Source | Training real | Training AI | Internal validation |
+| --- | ---: | ---: | ---: |
+| CIFAKE | 5,000 | 5,000 | 500 |
+| SID_Set | 5,000 | 5,000 | 500 |
+| WildFake ImageNet | 20,000 | 0 | 750 |
+| WildFake Church | 6,000 | 0 | 225 |
+| WildFake AFHQ | 6,000 | 0 | 225 |
+| WildFake FFHQ | 4,000 | 0 | 150 |
+| WildFake CelebA-HQ | 4,000 | 0 | 150 |
+| WildFake DDIM | 0 | 8,000 | 300 |
+| WildFake DDPM | 0 | 8,000 | 300 |
+| WildFake ADM | 0 | 8,000 | 300 |
+| WildFake Imagen | 0 | 8,000 | 300 |
+| WildFake VQDM | 0 | 8,000 | 300 |
+| **Total** | **50,000** | **50,000** | **4,000** |
 
-先准备 `data/wildfake_eval` 中的演示图片，再从项目目录运行：
+CIFAKE and SID_Set internal-validation quotas each contain 250 real and 250 AI images. SID_Set's tampered label 2 is excluded. WildFake AI images come from `Diffusion_based`, excluding all DALL·E archives; real sources exclude all COCO archives.
+
+Training further splits the internal-validation set into 1,000 calibration and 3,000 model-selection images using fixed sample IDs and seed 42. The COCO/DALL·E demonstration benchmark is not part of this internal split.
+
+## Run and resume preparation
+
+Prepare the demonstration images under `data/wildfake_eval` first, following the main README or notebook. From the project root:
 
 ```bash
 python -m pip install kagglehub datasets modelscope-hub
 python -u prepare_mixed_dataset.py --base-config config.mixed100k.yaml --workers 8
 ```
 
-沿用 `config.mixed100k.yaml` 可保留当前模型、增强、学习率与校准策略。脚本只在配额/划分检查通过后重新生成正式配置及 `config.mixed100k.smoke.yaml`；后者可用于 600 张训练、300 张内部验证、1 epoch 的可选 smoke run。
+Use the repository's training configuration as the template, not the older `config.yaml` and not the release companion saved as `config.release.yaml`. This preserves the original model, augmentation, optimizer, and automatic-calibration settings.
 
-- `--dry-run`：打印配额，不下载、不改数据。
-- `--existing-only`：缓存完整时重建 manifest/config；配额不完整时明确失败。
-- 重新运行同一命令可继续准备；不要在同一个缓存目录更换 seed 或配额。
-- 保留整个 `data/mixed100k_v2`，包括图片、SQLite 状态、test hash 缓存和 manifest。仅保存 CSV 不能恢复图片。
-- 训练恢复应另行设置 `training.resume`；数据准备脚本会将此字段重置为 null，因此不要在恢复训练前不必要地重新生成配置。
+After all quota/split checks pass, the script writes manifests and regenerates `config.mixed100k.yaml` and `config.mixed100k.smoke.yaml`. The optional smoke run uses 600 training images, 300 internal-validation images, and one epoch.
 
-## 下载与去重
+- `--dry-run`: print quotas without downloading or modifying datasets.
+- `--existing-only`: rebuild manifests/configurations from a complete cache; incomplete quotas raise an error.
+- Repeat the same command to continue interrupted preparation. Do not change the seed or source quotas within the same cache.
+- Keep the whole `data/mixed100k_v2` directory, including images, SQLite state, test-hash cache, and manifests. CSV files alone cannot restore the images.
+- Preparation resets `training.resume` to null and `output_dir` to `outputs/dinov2_mixed100k_v2`. Set a new experiment directory or resume checkpoint **after** preparation, before starting training.
 
-CIFAKE 上游归档可能完整下载，但只复制所选图片。SID_Set 采用流式读取与小 shuffle buffer，标签 2 不参与。WildFake 五个 Real 归档完整下载，大型 AI ZIP 默认使用并行 HTTP Range 按需提取图片。
+## Download behavior and overlap checks
 
-若服务器不支持 Range，脚本停止而非自动下载全部大型归档。只有接受完整下载的时间/磁盘成本后，才使用 `--download-mode full`。下载不需要 GPU。
+CIFAKE may download its full upstream archive, but only selected images are copied into the mixed dataset. SID_Set uses streaming with a small shuffle buffer. The five WildFake real-image archives are downloaded in full; large AI ZIPs use parallel HTTP Range extraction by default.
 
-脚本排除全部 WildFake COCO/DALL·E 归档，并对训练、内部验证及已存在的演示图片进行解码 RGB 精确去重。当前准备记录中索引了 13,841 张演示图片；这不检测缩放、重编码后的近重复。若演示集尚未存在，精确交集检查不可用，仅有来源排除，建议先下载演示集。
+If the server does not support Range requests, the script stops instead of silently downloading every large archive. Use `--download-mode full` only if you accept the additional download time and disk usage. No GPU is required for preparation.
 
-## Colab 存储提醒
+The builder excludes all WildFake COCO/DALL·E archives and checks decoded-RGB exact duplicates across training, internal validation, and demonstration images already present locally. The reported preparation indexed 13,841 demonstration images. This does not detect resized/re-encoded near-duplicates or semantic overlap. If the demonstration images are absent, the cross-benchmark exact-overlap check is unavailable, although source exclusions still apply.
 
-`/content` 可能随运行时回收而消失。Notebook 的 Drive 代码/权重备份明确排除 `data/`；需要避免重下时，必须另外备份数据。GitHub 同样不保存数据、权重或运行输出。
+## Storage and access
 
-官方来源：[CIFAKE](https://www.kaggle.com/datasets/birdy654/cifake-real-and-ai-generated-synthetic-images)、[SID_Set](https://huggingface.co/datasets/saberzl/SID_Set)、[WildFake](https://modelscope.cn/datasets/hy2628982280/WildFake/summary)。请遵守上游许可与访问要求。
+Colab `/content` storage is temporary. The notebook's optional Drive backup excludes `data/`; back up datasets separately to avoid downloading them again. GitHub contains code and selected reports; the checkpoint is hosted under [Releases](https://github.com/sunzk111/ai-image-detector/releases/tag/model), not in the training-data directory.
+
+Official sources: [CIFAKE](https://www.kaggle.com/datasets/birdy654/cifake-real-and-ai-generated-synthetic-images), [SID_Set](https://huggingface.co/datasets/saberzl/SID_Set), and [WildFake](https://modelscope.cn/datasets/hy2628982280/WildFake/summary). Respect upstream licenses and access requirements; do not put credentials in a shared notebook.
