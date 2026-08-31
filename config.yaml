@@ -1,0 +1,83 @@
+seed: 42
+output_dir: outputs/dinov2_v2
+
+runtime:
+  device: auto              # auto | cuda | cuda:0 | mps | cpu
+  precision: auto           # auto | fp32 | fp16 | bf16
+  allow_tf32: true
+  cudnn_benchmark: true
+  deterministic: false
+
+data:
+  # kind: imagefolder | manifest | huggingface
+  # ImageFolder example: data/cifake/train/{REAL,FAKE}/*.jpg
+  train:
+    kind: imagefolder
+    path: data/cifake/train
+  val:
+    kind: imagefolder
+    path: data/cifake/test
+  # Names are matched case-insensitively for ImageFolder datasets.
+  class_to_label:
+    real: 0
+    authentic: 0
+    non-aigc: 0
+    fake: 1
+    ai: 1
+    aigc: 1
+    synthetic: 1
+  # For manifest/Hugging Face labels. SID_Set can use {0: 0, 1: 1}
+  # to exclude tampered label 2, or map 2 to 1 if desired.
+  label_map:
+    0: 0
+    1: 1
+  num_workers: 8
+  pin_memory: true
+
+model:
+  # Fast V0-V2 baseline. Change to facebook/dinov2-large for DINOv2-L/14.
+  backbone: facebook/dinov2-base
+  image_size: 448
+  pooling: cls_mean          # cls | cls_mean
+  head_hidden_dim: 512
+  dropout: 0.2
+  gradient_checkpointing: false
+  max_parameters: 2000000000
+  image_mean: [0.485, 0.456, 0.406]
+  image_std: [0.229, 0.224, 0.225]
+
+augmentation:
+  enabled: true
+  curriculum:
+    early_fraction: 0.25
+    middle_fraction: 0.60
+  jpeg_qualities: [90, 70, 50, 30]
+  blur_sigmas: [0.5, 1.0, 2.0]
+  resize_scales: [0.5, 0.25]
+  noise_sigmas: [0.02, 0.05, 0.10]
+  color_jitter: 0.20
+  center_crop_fraction: 0.80
+
+loss:
+  clean_bce_weight: 1.0
+  augmented_bce_weight: 1.0
+  lambda_consistency: 0.20
+
+training:
+  epochs: 10
+  batch_size: 16
+  gradient_accumulation_steps: 1
+  backbone_lr: 1.0e-5
+  head_lr: 1.0e-4
+  weight_decay: 0.05
+  warmup_fraction: 0.10
+  max_grad_norm: 1.0
+  freeze_backbone_epochs: 1
+  amp: true
+  resume: null
+
+evaluation:
+  batch_size: 32
+  threshold: 0.5
+  output_csv: robustness.csv
+  output_json: robustness.json

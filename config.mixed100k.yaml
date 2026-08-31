@@ -1,0 +1,107 @@
+seed: 42
+output_dir: outputs/dinov2_mixed100k_v2
+runtime:
+  device: auto
+  precision: auto
+  allow_tf32: true
+  cudnn_benchmark: true
+  deterministic: false
+data:
+  train:
+    kind: manifest
+    path: data/mixed100k_v2/train.csv
+    root: .
+    split: train
+    forbid:
+      usage:
+      - validation_only
+      - test_only
+      - internal_validation
+  val:
+    kind: manifest
+    path: data/mixed100k_v2/val.csv
+    root: .
+    split: val
+  class_to_label:
+    real: 0
+    authentic: 0
+    non-aigc: 0
+    fake: 1
+    ai: 1
+    aigc: 1
+    synthetic: 1
+    coco: 0
+    dalle: 1
+  label_map:
+    0: 0
+    1: 1
+  num_workers: 8
+  pin_memory: true
+  validation_demo:
+    kind: imagefolder
+    path: /content/ai_image_detector/data/wildfake_eval
+model:
+  backbone: facebook/dinov2-base
+  image_size: 448
+  pooling: cls_mean
+  head_hidden_dim: 512
+  dropout: 0.2
+  gradient_checkpointing: false
+  max_parameters: 2000000000
+  image_mean:
+  - 0.485
+  - 0.456
+  - 0.406
+  image_std:
+  - 0.229
+  - 0.224
+  - 0.225
+augmentation:
+  enabled: true
+  curriculum:
+    early_fraction: 0.25
+    middle_fraction: 0.6
+  jpeg_qualities:
+  - 90
+  - 70
+  - 50
+  - 30
+  blur_sigmas:
+  - 0.5
+  - 1.0
+  - 2.0
+  resize_scales:
+  - 0.5
+  - 0.25
+  noise_sigmas:
+  - 0.02
+  - 0.05
+  - 0.1
+  color_jitter: 0.2
+  center_crop_fraction: 0.8
+loss:
+  clean_bce_weight: 1.0
+  augmented_bce_weight: 1.0
+  lambda_consistency: 0.2
+training:
+  epochs: 10
+  batch_size: 16
+  gradient_accumulation_steps: 1
+  backbone_lr: 1.0e-05
+  head_lr: 0.0001
+  weight_decay: 0.05
+  warmup_fraction: 0.1
+  max_grad_norm: 1.0
+  freeze_backbone_epochs: 1
+  amp: true
+  resume: null
+evaluation:
+  batch_size: 32
+  threshold: 0.5
+  threshold_source: checkpoint
+  calibration:
+    enabled: true
+    fraction: 0.25
+    seed: 42
+  output_csv: robustness.csv
+  output_json: robustness.json

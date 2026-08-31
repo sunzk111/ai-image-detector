@@ -1,0 +1,36 @@
+__pycache__/
+*.py[cod]
+.venv/
+data/
+outputs/
+.DS_Store
+
+# Runtime caches and local environments
+.ipynb_checkpoints/
+.pytest_cache/
+.cache/
+venv/
+
+# Datasets, trained weights, exports, and private backups
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.sqlite*
+*.db
+*_backup*/
+*cleanup_archive*/
+
+# Credentials must stay outside source control
+.env
+.env.*
+!.env.example
+kaggle.json
+*credentials*.json
+*.pem
+*.key
